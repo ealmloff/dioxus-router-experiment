@@ -1,0 +1,10 @@
+[package]
+name = "dioxus-router-exploration"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+dioxus = { path = "C:/Users/Desktop/github/dioxus/packages/dioxus" }
+router = { path = "router" }
+
+[features]
