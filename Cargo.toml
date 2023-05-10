@@ -6,5 +6,6 @@ edition = "2021"
 [dependencies]
 dioxus = { path = "C:/Users/Desktop/github/dioxus/packages/dioxus" }
 router = { path = "router" }
+dioxus-router-core = { path = "C:/Users/Desktop/github/dioxus/packages/router-core" }
 
 [features]

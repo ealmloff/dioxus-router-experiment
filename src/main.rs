@@ -1,27 +1,33 @@
+use dioxus::prelude::*;
+use dioxus_router_core::history::HistoryProvider;
+use router::Routable;
 use std::str::FromStr;
 
-use dioxus::prelude::*;
-
-struct Router<R: Routable> {
-    history: Vec<R>,
+struct Router<R: Routable, H: HistoryProvider> {
+    history: H,
     current_route: R,
+}
+
+impl<R: Routable, H: HistoryProvider> Router<R, H> {
+    fn new(history: H) -> Result<Self, R::Err> {
+        let path = history.current_path();
+        Ok(Self {
+            history,
+            current_route: R::from_str(path.as_str())?,
+        })
+    }
 }
 
 trait Routable: FromStr {
     fn render<'a>(self, cx: &'a ScopeState) -> Element<'a>;
 }
 
-// #[derive(Routable)]
-// enum Routes {
-//     #[route("/(dynamic)")]
-//     Route1 { dynamic: String },
-//     #[route("/hello_world/(dynamic)")]
-//     Route2 { dynamic: u32 },
-// }
-
+#[derive(Routable)]
 enum Route {
-    Route1 { dynamic: String },
+    #[route("/hello_world/(dynamic)")]
     Route2 { dynamic: u32 },
+    #[route("/(dynamic)")]
+    Route1 { dynamic: String },
 }
 
 #[allow(non_camel_case_types)]
@@ -47,27 +53,24 @@ impl FromStr for Route {
     }
 }
 
-router::gen_mod!(Route1 "pages/(dynamic).rs");
-router::gen_mod!(Route2 "pages/hello_world/(dynamic).rs");
-
 impl Routable for Route {
     fn render<'a>(self, cx: &'a ScopeState) -> Element<'a> {
         match self {
             Route::Route1 { dynamic } => {
-                let comp = Route1::Route1Props { dynamic };
+                let comp = Route1Props { dynamic };
                 let cx = cx.bump().alloc(Scoped {
                     props: cx.bump().alloc(comp),
                     scope: cx,
                 });
-                Route1::Route1(cx)
+                Route1(cx)
             }
             Route::Route2 { dynamic } => {
-                let comp = Route2::Route2Props { dynamic };
+                let comp = Route2Props { dynamic };
                 let cx = cx.bump().alloc(Scoped {
                     props: cx.bump().alloc(comp),
                     scope: cx,
                 });
-                Route2::Route2(cx)
+                Route2(cx)
             }
         }
     }
