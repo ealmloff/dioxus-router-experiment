@@ -35,6 +35,18 @@ impl Route {
         })
     }
 
+    pub fn display_match(&self) -> TokenStream2 {
+        let name = &self.route_name;
+        let dynamic_segments = self.route_segments.iter().filter_map(|s| s.name());
+        let write_segments = self.route_segments.iter().map(|s| s.write_segment());
+
+        quote! {
+            Self::#name { #(#dynamic_segments,)* } => {
+                #(#write_segments)*
+            }
+        }
+    }
+
     pub fn construct(&self, enum_name: Ident) -> TokenStream2 {
         let segments = self.route_segments.iter().filter_map(|seg| {
             seg.name().map(|name| {
@@ -197,15 +209,19 @@ pub enum RouteSegment {
 }
 
 impl RouteSegment {
-    fn is_static(&self) -> bool {
-        matches!(self, Self::Static(_))
-    }
-
     pub fn name(&self) -> Option<Ident> {
         match self {
-            Self::Static(segment) => None,
+            Self::Static(_) => None,
             Self::Dynamic(ident, _) => Some(ident.clone()),
             Self::CatchAll(ident, _) => Some(ident.clone()),
+        }
+    }
+
+    pub fn write_segment(&self) -> TokenStream2 {
+        match self {
+            Self::Static(segment) => quote! { write!(f, "/{}", #segment)?; },
+            Self::Dynamic(ident, _) => quote! { write!(f, "/{}", #ident)?; },
+            Self::CatchAll(ident, _) => quote! { write!(f, "/{}", #ident)?; },
         }
     }
 
@@ -240,7 +256,7 @@ impl RouteSegment {
                     let parsed = <#ty as std::str::FromStr>::from_str(segment).map_err(|err| #error_enum_name::#error_enum_varient(#inner_parse_enum::#error_name(err)));
                 }
             }
-            Self::CatchAll(_, ty) => {
+            Self::CatchAll(_, _) => {
                 todo!()
             }
         }

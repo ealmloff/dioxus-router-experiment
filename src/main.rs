@@ -46,6 +46,25 @@ enum Route {
 }
 
 #[test]
+fn display_works() {
+    let route = Route::Route1 {
+        dynamic: "hello".to_string(),
+    };
+
+    assert_eq!(route.to_string(), "/hello");
+
+    let route = Route::Route2 { dynamic: 1234 };
+
+    assert_eq!(route.to_string(), "/hello_world/1234");
+
+    let route = Route::Route1 {
+        dynamic: "hello_world".to_string(),
+    };
+
+    assert_eq!(route.to_string(), "/hello_world");
+}
+
+#[test]
 fn from_string_works() {
     let w = "/hello";
     assert_eq!(
@@ -79,12 +98,6 @@ fn from_string_works() {
     match Route::from_str(w) {
         Ok(r) => panic!("should not parse {r:?}"),
         Err(err) => println!("{err}"),
-    }
-}
-
-impl std::fmt::Display for Route {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        todo!()
     }
 }
 

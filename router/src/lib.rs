@@ -22,6 +22,7 @@ pub fn derive_routable(input: TokenStream) -> TokenStream {
 
     let error_type = route_enum.error_type();
     let parse_impl = route_enum.parse_impl();
+    let display_impl = route_enum.impl_display();
 
     quote! {
         #route_enum
@@ -29,6 +30,8 @@ pub fn derive_routable(input: TokenStream) -> TokenStream {
         #error_type
 
         #parse_impl
+
+        #display_impl
     }
     .into()
 }
@@ -64,6 +67,27 @@ impl RouteEnum {
         }
     }
 
+    fn impl_display(&self) -> TokenStream2 {
+        let mut display_match = Vec::new();
+
+        for route in &self.routes {
+            display_match.push(route.display_match());
+        }
+
+        let name = &self.route_name;
+
+        quote! {
+            impl std::fmt::Display for #name {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    match self {
+                        #(#display_match)*
+                    }
+                    Ok(())
+                }
+            }
+        }
+    }
+
     fn parse_impl(&self) -> TokenStream2 {
         let tree = RouteTreeSegment::build(&self.routes);
 
@@ -71,8 +95,8 @@ impl RouteEnum {
         let tokens = tree
             .into_iter()
             .map(|t| t.to_tokens(self.route_name.clone(), error_name.clone()));
-            
-        quote!{
+
+        quote! {
             impl FromStr for Route {
                 type Err = RouteParseError<RouteMatchError>;
 
