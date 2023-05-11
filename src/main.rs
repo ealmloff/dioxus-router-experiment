@@ -101,29 +101,6 @@ fn from_string_works() {
     }
 }
 
-impl Routable for Route {
-    fn render<'a>(self, cx: &'a ScopeState) -> Element<'a> {
-        match self {
-            Route::Route1 { dynamic } => {
-                let comp = Route1Props { dynamic };
-                let cx = cx.bump().alloc(Scoped {
-                    props: cx.bump().alloc(comp),
-                    scope: cx,
-                });
-                Route1(cx)
-            }
-            Route::Route2 { dynamic } => {
-                let comp = Route2Props { dynamic };
-                let cx = cx.bump().alloc(Scoped {
-                    props: cx.bump().alloc(comp),
-                    scope: cx,
-                });
-                Route2(cx)
-            }
-        }
-    }
-}
-
 fn root(cx: Scope) -> Element {
     render! {div {}}
 }

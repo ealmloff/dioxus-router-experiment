@@ -47,6 +47,22 @@ impl Route {
         }
     }
 
+    pub fn routable_match(&self) ->TokenStream2{
+        let name = &self.route_name;
+        let props_name = format_ident!("{}Props", name);
+
+        quote!{
+            Self::#name { dynamic } => {
+                let comp = #props_name { dynamic };
+                let cx = cx.bump().alloc(Scoped {
+                    props: cx.bump().alloc(comp),
+                    scope: cx,
+                });
+                #name(cx)
+            }
+        }
+    }
+
     pub fn construct(&self, enum_name: Ident) -> TokenStream2 {
         let segments = self.route_segments.iter().filter_map(|seg| {
             seg.name().map(|name| {
@@ -123,6 +139,7 @@ impl ToTokens for Route {
 
         tokens.extend(quote!(
             #[path = #route]
+            #[allow(non_snake_case)]
             mod #route_name;
             pub use #route_name::{#prop_name, #route_name};
         ));

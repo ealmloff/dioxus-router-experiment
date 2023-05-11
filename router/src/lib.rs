@@ -23,6 +23,7 @@ pub fn derive_routable(input: TokenStream) -> TokenStream {
     let error_type = route_enum.error_type();
     let parse_impl = route_enum.parse_impl();
     let display_impl = route_enum.impl_display();
+    let routable_impl = route_enum.routable_impl();
 
     quote! {
         #route_enum
@@ -32,6 +33,8 @@ pub fn derive_routable(input: TokenStream) -> TokenStream {
         #parse_impl
 
         #display_impl
+
+        #routable_impl
     }
     .into()
 }
@@ -159,6 +162,25 @@ impl RouteEnum {
             }
         }
     }
+
+    fn routable_impl(&self) -> TokenStream2 {
+        let mut routable_match = Vec::new();
+
+        for route in &self.routes {
+            routable_match.push(route.routable_match());
+        }
+
+        quote!{
+            impl Routable for Route {
+                fn render<'a>(self, cx: &'a ScopeState) -> Element<'a> {
+                    match self {
+                        #(#routable_match)*
+                    }
+                }
+            }
+        }
+    }
+    
 }
 
 impl ToTokens for RouteEnum {
