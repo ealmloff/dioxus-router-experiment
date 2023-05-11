@@ -1,9 +1,9 @@
 use dioxus::prelude::*;
 
 #[inline_props]
-pub fn Route2(cx: Scope, dynamic: u32) -> Element {
+pub fn Route3(cx: Scope, dynamic: u32) -> Element {
     render! {div {
-        "Route2 {{
+        "Route3 {{
             dynamic: {dynamic}
         }}"
     }}

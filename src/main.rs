@@ -70,10 +70,14 @@ where
 enum Route {
     #[route("/(dynamic)")]
     Route1 { dynamic: String },
+    #[route("/hello_world")]
+    Route2 {},
     #[route("/hello_world/(dynamic)")]
-    Route2 { dynamic: u32 },
+    Route3 { dynamic: u32 },
     #[route("/(number1)/(number2)")]
-    Route3 { number1: u32, number2: u32 },
+    Route4 { number1: u32, number2: u32 },
+    #[route("/")]
+    Route5 {},
 }
 
 #[test]
@@ -84,15 +88,15 @@ fn display_works() {
 
     assert_eq!(route.to_string(), "/hello");
 
-    let route = Route::Route2 { dynamic: 1234 };
+    let route = Route::Route3 { dynamic: 1234 };
 
     assert_eq!(route.to_string(), "/hello_world/1234");
 
     let route = Route::Route1 {
-        dynamic: "hello_world".to_string(),
+        dynamic: "hello_world2".to_string(),
     };
 
-    assert_eq!(route.to_string(), "/hello_world");
+    assert_eq!(route.to_string(), "/hello_world2");
 }
 
 #[test]
@@ -113,15 +117,15 @@ fn from_string_works() {
     );
 
     let w = "/hello_world/1234";
-    assert_eq!(Route::from_str(w), Ok(Route::Route2 { dynamic: 1234 }));
+    assert_eq!(Route::from_str(w), Ok(Route::Route3 { dynamic: 1234 }));
     let w = "/hello_world/1234/";
-    assert_eq!(Route::from_str(w), Ok(Route::Route2 { dynamic: 1234 }));
+    assert_eq!(Route::from_str(w), Ok(Route::Route3 { dynamic: 1234 }));
 
-    let w = "/hello_world";
+    let w = "/hello_world2";
     assert_eq!(
         Route::from_str(w),
         Ok(Route::Route1 {
-            dynamic: "hello_world".to_string()
+            dynamic: "hello_world2".to_string()
         })
     );
 
@@ -129,6 +133,33 @@ fn from_string_works() {
     match Route::from_str(w) {
         Ok(r) => panic!("should not parse {r:?}"),
         Err(err) => println!("{err}"),
+    }
+}
+
+#[test]
+fn round_trip() {
+    // Route1
+    let string = "hello_world2";
+    let route = Route::Route1 {
+        dynamic: string.to_string(),
+    };
+    assert_eq!(Route::from_str(&route.to_string()), Ok(route));
+
+    // Route2
+    for num in 0..100 {
+        let route = Route::Route3 { dynamic: num };
+        assert_eq!(Route::from_str(&route.to_string()), Ok(route));
+    }
+
+    // Route3
+    for num1 in 0..100 {
+        for num2 in 0..100 {
+            let route = Route::Route4 {
+                number1: num1,
+                number2: num2,
+            };
+            assert_eq!(Route::from_str(&route.to_string()), Ok(route));
+        }
     }
 }
 

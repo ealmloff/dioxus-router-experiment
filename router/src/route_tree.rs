@@ -14,6 +14,7 @@ pub enum RouteTreeSegment<'a> {
         from_route: &'a Route,
     },
     Dynamic(&'a Route),
+    StaticEnd(&'a Route),
 }
 
 impl<'a> RouteTreeSegment<'a> {
@@ -58,7 +59,12 @@ impl<'a> RouteTreeSegment<'a> {
                 }
                 // If there is no static segment, add the route to the dynamic routes
                 None => {
-                    dyn_segments.push(RouteTreeSegment::Dynamic(route.route));
+                    // This route is entirely static
+                    if route.route.route_segments.len() == route.static_segment_index {
+                        static_segments.push(RouteTreeSegment::StaticEnd(route.route));
+                    } else {
+                        dyn_segments.push(RouteTreeSegment::Dynamic(route.route));
+                    }
                 }
             }
         }
@@ -83,15 +89,24 @@ impl<'a> RouteTreeSegment<'a> {
                 let enum_varient = &from_route.route_name;
                 let error_ident = static_segment_idx(*index);
 
-                let children = children
-                    .iter()
-                    .map(|child| child.to_tokens(enum_name.clone(), error_enum_name.clone()));
+                let children_with_next_segment = children.iter().filter_map(|child| match child {
+                    RouteTreeSegment::StaticEnd { .. } => None,
+                    _ => Some(child.to_tokens(enum_name.clone(), error_enum_name.clone())),
+                });
+                let children_without_next_segment =
+                    children.iter().filter_map(|child| match child {
+                        RouteTreeSegment::StaticEnd { .. } => {
+                            Some(child.to_tokens(enum_name.clone(), error_enum_name.clone()))
+                        }
+                        _ => None,
+                    });
 
                 quote! {
                     if #segment == segment {
                         let mut segments = segments.clone();
+                        #(#children_without_next_segment)*
                         if let Some(segment) = segments.next() {
-                            #(#children)*
+                            #(#children_with_next_segment)*
                         }
                     }
                     else {
@@ -129,6 +144,7 @@ impl<'a> RouteTreeSegment<'a> {
                         let name = name
                             .map(|name| quote! {#name})
                             .unwrap_or_else(|| quote! {_});
+
                         let sucess = if has_next {
                             quote! {
                                 let mut segments = segments.clone();
@@ -159,29 +175,57 @@ impl<'a> RouteTreeSegment<'a> {
                 }
 
                 let construct_variant = route.construct(enum_name);
-                let return_constructed = quote! {
-                    let remaining_segments = segments.clone();
-                    let mut segments_clone = segments.clone();
-                    let next_segment = segments_clone.next();
-                    let segment_after_next = segments_clone.next();
-                    match (next_segment, segment_after_next) {
-                        // This is the last segment, return the parsed route
-                        (None, _) | (Some(""), None) => {
-                            return Ok(#construct_variant);
-                        }
-                        _ => {
-                            let mut trailing = String::new();
-                            for seg in remaining_segments {
-                                trailing += seg;
-                                trailing += "/";
-                            }
-                            trailing.pop();
-                            errors.push(#error_enum_name::#enum_varient(#varient_parse_error::ExtraSegments(trailing)))
-                        }
-                    }
-                };
 
-                print_route_segment(route_segments.peekable(), return_constructed)
+                print_route_segment(
+                    route_segments.peekable(),
+                    return_constructed(
+                        construct_variant,
+                        &error_enum_name,
+                        enum_varient,
+                        &varient_parse_error,
+                    ),
+                )
+            }
+            Self::StaticEnd(route) => {
+                let varient_parse_error = route.error_ident();
+                let enum_varient = &route.route_name;
+                let construct_variant = route.construct(enum_name);
+
+                return_constructed(
+                    construct_variant,
+                    &error_enum_name,
+                    enum_varient,
+                    &varient_parse_error,
+                )
+            }
+        }
+    }
+}
+
+fn return_constructed(
+    construct_variant: TokenStream,
+    error_enum_name: &Ident,
+    enum_varient: &Ident,
+    varient_parse_error: &Ident,
+) -> TokenStream {
+    quote! {
+        let remaining_segments = segments.clone();
+        let mut segments_clone = segments.clone();
+        let next_segment = segments_clone.next();
+        let segment_after_next = segments_clone.next();
+        match (next_segment, segment_after_next) {
+            // This is the last segment, return the parsed route
+            (None, _) | (Some(""), None) => {
+                return Ok(#construct_variant);
+            }
+            _ => {
+                let mut trailing = String::new();
+                for seg in remaining_segments {
+                    trailing += seg;
+                    trailing += "/";
+                }
+                trailing.pop();
+                errors.push(#error_enum_name::#enum_varient(#varient_parse_error::ExtraSegments(trailing)))
             }
         }
     }

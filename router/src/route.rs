@@ -138,7 +138,20 @@ impl Route {
 
 impl ToTokens for Route {
     fn to_tokens(&self, tokens: &mut quote::__private::TokenStream) {
-        let route = self.route.value()[1..].to_string() + ".rs";
+        let without_leading_slash = &self.route.value()[1..];
+        let route_path = std::path::Path::new(without_leading_slash);
+        let with_extension = route_path.with_extension("rs");
+        let dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+        let dir = std::path::Path::new(&dir);
+        let route = dir.join("src").join("pages").join(with_extension.clone());
+
+        // check if the route exists or if not use the index route
+        let route = if route.exists() && without_leading_slash != "" {
+            with_extension.to_str().unwrap().to_string()
+        } else {
+            route_path.join("index.rs").to_str().unwrap().to_string()
+        };
+        println!("route: {}", route);
         let route_name: Ident = self.route_name.clone();
         let prop_name = Ident::new(&(self.route_name.to_string() + "Props"), Span::call_site());
 
