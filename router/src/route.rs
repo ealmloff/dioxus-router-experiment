@@ -1,11 +1,34 @@
 use quote::{__private::Span, format_ident, quote, ToTokens};
 use syn::{Ident, LitStr, Type, Variant};
+use syn::parse::ParseStream;
+use syn::parse::Parse;
 
 use proc_macro2::TokenStream as TokenStream2;
 
+struct RouteArgs{
+    route: LitStr,
+    comp_name: Option<Ident>,
+    props_name: Option<Ident>,
+}
+
+impl Parse for RouteArgs{
+    fn parse(input: ParseStream<'_>) -> syn::Result<Self>{
+        let route = input.parse::<LitStr>()?;
+
+        Ok(RouteArgs {
+            route,
+            comp_name:input.parse().ok(),
+            props_name: input.parse().ok(),
+        })
+    }
+}
+
 #[derive(Debug)]
 pub struct Route {
+    pub file_based: bool,
     pub route_name: Ident,
+    pub comp_name: Ident,
+    pub props_name: Ident,
     pub route: LitStr,
     pub route_segments: Vec<RouteSegment>,
 }
@@ -23,15 +46,22 @@ impl Route {
                 )
             })?;
 
-        let route = route_attr.parse_args::<LitStr>()?;
+        let route_name = input.ident.clone();
+        let args = route_attr.parse_args::<RouteArgs>()?;
+        let route = args.route;
+        let file_based= args.comp_name.is_none();
+        let comp_name = args.comp_name.unwrap_or_else(|| format_ident!("{}", route_name));
+        let props_name = args.props_name.unwrap_or_else(|| format_ident!("{}Props", comp_name));
 
         let route_segments = parse_route_segments(&input, &route)?;
-        let route_name = input.ident;
 
         Ok(Self {
+            comp_name,
+            props_name,
             route_name,
             route_segments,
             route,
+            file_based,
         })
     }
 
@@ -54,7 +84,8 @@ impl Route {
             .iter()
             .filter_map(|s| s.name())
             .collect();
-        let props_name = format_ident!("{}Props", name);
+        let props_name = &self.props_name;
+        let comp_name = &self.comp_name;
 
         quote! {
             Self::#name { #(#dynamic_segments,)* } => {
@@ -63,7 +94,7 @@ impl Route {
                     props: cx.bump().alloc(comp),
                     scope: cx,
                 });
-                #name(cx)
+                #comp_name(cx)
             }
         }
     }
@@ -138,6 +169,10 @@ impl Route {
 
 impl ToTokens for Route {
     fn to_tokens(&self, tokens: &mut quote::__private::TokenStream) {
+        if !self.file_based {
+            return;
+       }
+
         let without_leading_slash = &self.route.value()[1..];
         let route_path = std::path::Path::new(without_leading_slash);
         let with_extension = route_path.with_extension("rs");
@@ -151,9 +186,9 @@ impl ToTokens for Route {
         } else {
             route_path.join("index.rs").to_str().unwrap().to_string()
         };
-        println!("route: {}", route);
+
         let route_name: Ident = self.route_name.clone();
-        let prop_name = Ident::new(&(self.route_name.to_string() + "Props"), Span::call_site());
+        let prop_name = &self.props_name;
 
         tokens.extend(quote!(
             #[path = #route]
