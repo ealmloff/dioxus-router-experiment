@@ -12,18 +12,24 @@ impl<E: std::fmt::Display> std::fmt::Display for RouteParseError<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "Route did not match:\nAttempted Matches:\n")?;
         for (i, route) in self.attempted_routes.iter().enumerate() {
-            writeln!(f, "{i}) {route}")?;
+            writeln!(f, "{}) {route}", i + 1)?;
         }
         Ok(())
     }
 }
 
-struct Router<R: Routable, H: HistoryProvider> where <R as FromStr>::Err: std::fmt::Display {
+struct Router<R: Routable, H: HistoryProvider>
+where
+    <R as FromStr>::Err: std::fmt::Display,
+{
     history: H,
     route: R,
 }
 
-impl<R: Routable, H: HistoryProvider> Router<R, H>where <R as FromStr>::Err: std::fmt::Display {
+impl<R: Routable, H: HistoryProvider> Router<R, H>
+where
+    <R as FromStr>::Err: std::fmt::Display,
+{
     fn new(history: H) -> Result<Self, R::Err> {
         let path = history.current_path();
         Ok(Self {
@@ -38,12 +44,18 @@ struct RouterProps {
     current_route: String,
 }
 
-trait Routable: FromStr + std::fmt::Display + Clone where <Self as FromStr>::Err: std::fmt::Display {
+trait Routable: FromStr + std::fmt::Display + Clone
+where
+    <Self as FromStr>::Err: std::fmt::Display,
+{
     fn render(self, cx: &ScopeState) -> Element;
 
-    fn comp(cx: Scope<RouterProps>)-> Element where Self: 'static {
+    fn comp(cx: Scope<RouterProps>) -> Element
+    where
+        Self: 'static,
+    {
         let router = Self::from_str(&cx.props.current_route);
-        match router{
+        match router {
             Ok(router) => router.render(cx),
             Err(err) => {
                 render! {pre {
@@ -60,6 +72,8 @@ enum Route {
     Route1 { dynamic: String },
     #[route("/hello_world/(dynamic)")]
     Route2 { dynamic: u32 },
+    #[route("/(number1)/(number2)")]
+    Route3 { number1: u32, number2: u32 },
 }
 
 #[test]
@@ -121,7 +135,7 @@ fn from_string_works() {
 fn root(cx: Scope) -> Element {
     let current_route = use_ref(cx, String::new);
 
-    render!{
+    render! {
         input {
             oninput: |evt| {
                 *current_route.write() = evt.value.clone()

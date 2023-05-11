@@ -47,13 +47,18 @@ impl Route {
         }
     }
 
-    pub fn routable_match(&self) ->TokenStream2{
+    pub fn routable_match(&self) -> TokenStream2 {
         let name = &self.route_name;
+        let dynamic_segments: Vec<_> = self
+            .route_segments
+            .iter()
+            .filter_map(|s| s.name())
+            .collect();
         let props_name = format_ident!("{}Props", name);
 
-        quote!{
-            Self::#name { dynamic } => {
-                let comp = #props_name { dynamic };
+        quote! {
+            Self::#name { #(#dynamic_segments,)* } => {
+                let comp = #props_name { #(#dynamic_segments,)* };
                 let cx = cx.bump().alloc(Scoped {
                     props: cx.bump().alloc(comp),
                     scope: cx,

@@ -179,7 +179,7 @@ impl RouteEnum {
             routable_match.push(route.routable_match());
         }
 
-        quote!{
+        quote! {
             impl Routable for Route {
                 fn render<'a>(self, cx: &'a ScopeState) -> Element<'a> {
                     match self {

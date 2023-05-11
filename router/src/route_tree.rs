@@ -119,20 +119,32 @@ impl<'a> RouteTreeSegment<'a> {
                         )
                     });
 
-                fn print_route_segment(
-                    mut s: impl Iterator<Item = (Option<Ident>, TokenStream)>,
+                fn print_route_segment<I: Iterator<Item = (Option<Ident>, TokenStream)>>(
+                    mut s: std::iter::Peekable<I>,
                     sucess_tokens: TokenStream,
                 ) -> TokenStream {
                     if let Some((name, first)) = s.next() {
+                        let has_next = s.peek().is_some();
                         let children = print_route_segment(s, sucess_tokens);
                         let name = name
                             .map(|name| quote! {#name})
                             .unwrap_or_else(|| quote! {_});
+                        let sucess = if has_next {
+                            quote! {
+                                let mut segments = segments.clone();
+                                if let Some(segment) = segments.next() {
+                                    #children
+                                }
+                            }
+                        } else {
+                            children
+                        };
+
                         quote! {
                             #first
                             match parsed {
                                 Ok(#name) => {
-                                    #children
+                                    #sucess
                                 }
                                 Err(err) => {
                                     errors.push(err);
@@ -149,8 +161,9 @@ impl<'a> RouteTreeSegment<'a> {
                 let construct_variant = route.construct(enum_name);
                 let return_constructed = quote! {
                     let remaining_segments = segments.clone();
-                    let next_segment = segments.next();
-                    let segment_after_next = segments.next();
+                    let mut segments_clone = segments.clone();
+                    let next_segment = segments_clone.next();
+                    let segment_after_next = segments_clone.next();
                     match (next_segment, segment_after_next) {
                         // This is the last segment, return the parsed route
                         (None, _) | (Some(""), None) => {
@@ -168,7 +181,7 @@ impl<'a> RouteTreeSegment<'a> {
                     }
                 };
 
-                print_route_segment(route_segments, return_constructed)
+                print_route_segment(route_segments.peekable(), return_constructed)
             }
         }
     }
