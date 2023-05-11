@@ -149,7 +149,7 @@ impl RouteEnum {
             let route_str = &route.route;
 
             error_variants.push(quote! { #route_name(#error_name) });
-            display_match.push(quote! { Self::#route_name(err) => write!(f, "Route '{}' ({}) did not match:\n{}", stringify!(#route_name), #route_str, err)? });
+            display_match.push(quote! { Self::#route_name(err) => write!(f, "Route '{}' ('{}') did not match:\n{}", stringify!(#route_name), #route_str, err)? });
             type_defs.push(route.error_type());
         }
 

@@ -99,11 +99,11 @@ impl Route {
                 }
                 RouteSegment::Dynamic(ident, ty) => {
                     error_variants.push(quote! { #error_name(<#ty as std::str::FromStr>::Err) });
-                    display_match.push(quote! { Self::#error_name(err) => write!(f, "Dynamic segment '{}' did not match: {}", stringify!(#ident), err)? });
+                    display_match.push(quote! { Self::#error_name(err) => write!(f, "Dynamic segment '({}:{})' did not match: {}", stringify!(#ident), stringify!(#ty), err)? });
                 }
                 RouteSegment::CatchAll(ident, ty) => {
                     error_variants.push(quote! { #error_name(<#ty as std::str::FromStr>::Err) });
-                    display_match.push(quote! { Self::#error_name(err) => write!(f, "Catch-all segment '{}' did not match: {}", stringify!(#ident), err)? });
+                    display_match.push(quote! { Self::#error_name(err) => write!(f, "Catch-all segment '({}:{})' did not match: {}", stringify!(#ident), stringify!(#ty), err)? });
                 }
             }
         }
