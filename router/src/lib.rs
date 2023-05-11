@@ -1,17 +1,34 @@
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
-use quote::{__private::Span, quote, ToTokens};
-use syn::{parse_macro_input, Ident, LitStr};
+use quote::{__private::Span, format_ident, quote, ToTokens};
+use route::Route;
+use route_tree::RouteTreeSegment;
+use syn::{parse_macro_input, Ident};
+
+use proc_macro2::TokenStream as TokenStream2;
+
+mod route;
+mod route_tree;
 
 #[proc_macro_derive(Routable, attributes(route))]
 pub fn derive_routable(input: TokenStream) -> TokenStream {
     let routes_enum = parse_macro_input!(input as syn::DeriveInput);
 
-    let route_enum = RouteEnum::parse(routes_enum).unwrap();
+    let route_enum = match RouteEnum::parse(routes_enum) {
+        Ok(route_enum) => route_enum,
+        Err(err) => return TokenStream2::from(err.to_compile_error()).into(),
+    };
+
+    let error_type = route_enum.error_type();
+    let parse_impl = route_enum.parse_impl();
 
     quote! {
         #route_enum
+
+        #error_type
+
+        #parse_impl
     }
     .into()
 }
@@ -33,15 +50,89 @@ impl RouteEnum {
                 routes.push(route);
             }
 
-            Ok(Self {
+            let myself = Self {
                 route_name: name.clone(),
                 routes,
-            })
+            };
+
+            Ok(myself)
         } else {
             Err(syn::Error::new_spanned(
                 input.clone(),
                 "Routable can only be derived for enums",
             ))
+        }
+    }
+
+    fn parse_impl(&self) -> TokenStream2 {
+        let tree = RouteTreeSegment::build(&self.routes);
+
+        let error_name = format_ident!("{}MatchError", self.route_name);
+        let tokens = tree
+            .into_iter()
+            .map(|t| t.to_tokens(self.route_name.clone(), error_name.clone()));
+            
+        quote!{
+            impl FromStr for Route {
+                type Err = RouteParseError<RouteMatchError>;
+
+                fn from_str(s: &str) -> Result<Self, Self::Err> {
+                    let mut segments = s.strip_prefix('/').unwrap_or(s).split('/');
+                    let mut errors = Vec::new();
+
+                    if let Some(segment) = segments.next() {
+                        #(#tokens)*
+                    }
+
+                    Err(RouteParseError {
+                        attempted_routes: errors,
+                    })
+                }
+            }
+        }
+    }
+
+    fn error_name(&self) -> Ident {
+        Ident::new(
+            &(self.route_name.to_string() + "MatchError"),
+            Span::call_site(),
+        )
+    }
+
+    fn error_type(&self) -> TokenStream2 {
+        let match_error_name = self.error_name();
+
+        let mut type_defs = Vec::new();
+        let mut error_variants = Vec::new();
+        let mut display_match = Vec::new();
+
+        for route in &self.routes {
+            let route_name = &route.route_name;
+
+            let error_name = Ident::new(&format!("{}ParseError", route_name), Span::call_site());
+            let route_str = &route.route;
+
+            error_variants.push(quote! { #route_name(#error_name) });
+            display_match.push(quote! { Self::#route_name(err) => write!(f, "Route '{}' ({}) did not match: {}", stringify!(#route_name), #route_str, err)? });
+            type_defs.push(route.error_type());
+        }
+
+        quote! {
+            #(#type_defs)*
+
+            #[derive(Debug, PartialEq)]
+            pub enum #match_error_name {
+                #(#error_variants),*
+            }
+
+            impl std::fmt::Display for #match_error_name {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                    match self {
+                        #(#display_match),*
+                    }
+                    Ok(())
+                }
+            }
         }
     }
 }
@@ -58,70 +149,4 @@ impl ToTokens for RouteEnum {
             pub use pages::*;
         ));
     }
-}
-
-#[derive(Debug)]
-struct Route {
-    route_name: Ident,
-    route: LitStr,
-    route_segments: Vec<RouteSegment>,
-}
-
-impl Route {
-    fn parse(input: syn::Variant) -> syn::Result<Self> {
-        let route_attr = input
-            .attrs
-            .iter()
-            .find(|attr| attr.path.is_ident("route"))
-            .ok_or_else(|| {
-                syn::Error::new_spanned(
-                    input.clone(),
-                    "Routable variants must have a #[route(...)] attribute",
-                )
-            })?;
-        let route = route_attr.parse_args::<LitStr>()?;
-
-        let route_name = input.ident;
-
-        Ok(Self {
-            route_name,
-            route_segments: parse_route_segments(route.value()),
-            route,
-        })
-    }
-}
-
-impl ToTokens for Route {
-    fn to_tokens(&self, tokens: &mut quote::__private::TokenStream) {
-        let route = self.route.value()[1..].to_string() + ".rs";
-        let route_name: Ident = self.route_name.clone();
-        let prop_name = Ident::new(&(self.route_name.to_string() + "Props"), Span::call_site());
-
-        tokens.extend(quote!(
-            #[path = #route]
-            mod #route_name;
-            pub use #route_name::{#prop_name, #route_name};
-        ));
-    }
-}
-
-fn parse_route_segments(route: String) -> Vec<RouteSegment> {
-    let mut route_segments = Vec::new();
-
-    for segment in route.split('/') {
-        if segment.starts_with('(') && segment.ends_with(')') {
-            let ident = segment[1..segment.len() - 1].to_string();
-            route_segments.push(RouteSegment::Dynamic(Ident::new(&ident, Span::call_site())));
-        } else {
-            route_segments.push(RouteSegment::Static(segment.to_string()));
-        }
-    }
-
-    route_segments
-}
-
-#[derive(Debug)]
-enum RouteSegment {
-    Static(String),
-    Dynamic(Ident),
 }

@@ -3,9 +3,24 @@ use dioxus_router_core::history::HistoryProvider;
 use router::Routable;
 use std::str::FromStr;
 
+#[derive(Debug, PartialEq)]
+struct RouteParseError<E: std::fmt::Display> {
+    attempted_routes: Vec<E>,
+}
+
+impl<E: std::fmt::Display> std::fmt::Display for RouteParseError<E> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Route did not match: ")?;
+        for route in &self.attempted_routes {
+            writeln!(f, "{}", route)?;
+        }
+        Ok(())
+    }
+}
+
 struct Router<R: Routable, H: HistoryProvider> {
     history: H,
-    current_route: R,
+    route: R,
 }
 
 impl<R: Routable, H: HistoryProvider> Router<R, H> {
@@ -13,42 +28,62 @@ impl<R: Routable, H: HistoryProvider> Router<R, H> {
         let path = history.current_path();
         Ok(Self {
             history,
-            current_route: R::from_str(path.as_str())?,
+            route: R::from_str(path.as_str())?,
         })
     }
 }
 
-trait Routable: FromStr {
-    fn render<'a>(self, cx: &'a ScopeState) -> Element<'a>;
+trait Routable: FromStr + std::fmt::Display {
+    fn render(self, cx: &ScopeState) -> Element;
 }
 
-#[derive(Routable)]
+#[derive(Routable, Debug, PartialEq)]
 enum Route {
-    #[route("/hello_world/(dynamic)")]
-    Route2 { dynamic: u32 },
     #[route("/(dynamic)")]
     Route1 { dynamic: String },
+    #[route("/hello_world/(dynamic)")]
+    Route2 { dynamic: u32 },
 }
 
-#[allow(non_camel_case_types)]
-enum RouteSegmentParseError {
-    Route1_dynamic(<String as FromStr>::Err),
-    Route2_dynamic(<u32 as FromStr>::Err),
+#[test]
+fn from_string_works() {
+    let w = "/hello";
+    assert_eq!(
+        Route::from_str(w),
+        Ok(Route::Route1 {
+            dynamic: "hello".to_string()
+        })
+    );
+    let w = "/hello/";
+    assert_eq!(
+        Route::from_str(w),
+        Ok(Route::Route1 {
+            dynamic: "hello".to_string()
+        })
+    );
+
+    let w = "/hello_world/1234";
+    assert_eq!(Route::from_str(w), Ok(Route::Route2 { dynamic: 1234 }));
+    let w = "/hello_world/1234/";
+    assert_eq!(Route::from_str(w), Ok(Route::Route2 { dynamic: 1234 }));
+
+    let w = "/hello_world";
+    assert_eq!(
+        Route::from_str(w),
+        Ok(Route::Route1 {
+            dynamic: "hello_world".to_string()
+        })
+    );
+
+    let w = "/hello_world/-1";
+    match Route::from_str(w) {
+        Ok(r) => panic!("should not parse {r:?}"),
+        Err(err) => println!("{err}"),
+    }
 }
 
-struct ParseRouteFailure {
-    route_name: String,
-    error: RouteParseError,
-}
-
-struct RouteParseError {
-    attempted_routes: Vec<Route>,
-}
-
-impl FromStr for Route {
-    type Err = RouteParseError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
+impl std::fmt::Display for Route {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         todo!()
     }
 }
