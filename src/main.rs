@@ -10,20 +10,20 @@ struct RouteParseError<E: std::fmt::Display> {
 
 impl<E: std::fmt::Display> std::fmt::Display for RouteParseError<E> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Route did not match: ")?;
-        for route in &self.attempted_routes {
-            writeln!(f, "{}", route)?;
+        write!(f, "Route did not match:\nAttempted Matches:\n")?;
+        for (i, route) in self.attempted_routes.iter().enumerate() {
+            writeln!(f, "{i}) {route}")?;
         }
         Ok(())
     }
 }
 
-struct Router<R: Routable, H: HistoryProvider> {
+struct Router<R: Routable, H: HistoryProvider> where <R as FromStr>::Err: std::fmt::Display {
     history: H,
     route: R,
 }
 
-impl<R: Routable, H: HistoryProvider> Router<R, H> {
+impl<R: Routable, H: HistoryProvider> Router<R, H>where <R as FromStr>::Err: std::fmt::Display {
     fn new(history: H) -> Result<Self, R::Err> {
         let path = history.current_path();
         Ok(Self {
@@ -33,11 +33,28 @@ impl<R: Routable, H: HistoryProvider> Router<R, H> {
     }
 }
 
-trait Routable: FromStr + std::fmt::Display {
-    fn render(self, cx: &ScopeState) -> Element;
+#[derive(Props, PartialEq)]
+struct RouterProps {
+    current_route: String,
 }
 
-#[derive(Routable, Debug, PartialEq)]
+trait Routable: FromStr + std::fmt::Display + Clone where <Self as FromStr>::Err: std::fmt::Display {
+    fn render(self, cx: &ScopeState) -> Element;
+
+    fn comp(cx: Scope<RouterProps>)-> Element where Self: 'static {
+        let router = Self::from_str(&cx.props.current_route);
+        match router{
+            Ok(router) => router.render(cx),
+            Err(err) => {
+                render! {pre {
+                    "{err}"
+                }}
+            }
+        }
+    }
+}
+
+#[derive(Routable, Clone, Debug, PartialEq)]
 enum Route {
     #[route("/(dynamic)")]
     Route1 { dynamic: String },
@@ -102,7 +119,22 @@ fn from_string_works() {
 }
 
 fn root(cx: Scope) -> Element {
-    render! {div {}}
+    let current_route = use_ref(cx, String::new);
+
+    render!{
+        input {
+            oninput: |evt| {
+                *current_route.write() = evt.value.clone()
+            },
+            value: "{current_route.read()}"
+        }
+
+        Route::comp {
+            current_route: current_route.read().clone(),
+        }
+    }
 }
 
-fn main() {}
+fn main() {
+    dioxus_desktop::launch(root);
+}

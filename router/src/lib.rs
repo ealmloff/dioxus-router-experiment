@@ -93,6 +93,7 @@ impl RouteEnum {
 
     fn parse_impl(&self) -> TokenStream2 {
         let tree = RouteTreeSegment::build(&self.routes);
+        let name = &self.route_name;
 
         let error_name = format_ident!("{}MatchError", self.route_name);
         let tokens = tree
@@ -100,8 +101,16 @@ impl RouteEnum {
             .map(|t| t.to_tokens(self.route_name.clone(), error_name.clone()));
 
         quote! {
-            impl FromStr for Route {
-                type Err = RouteParseError<RouteMatchError>;
+            impl<'a> TryFrom<&'a str> for #name {
+                type Error = <Self as std::str::FromStr>::Err;
+
+                fn try_from(s: &'a str) -> Result<Self, Self::Error> {
+                    s.parse()
+                }
+            }
+
+            impl std::str::FromStr for #name {
+                type Err = RouteParseError<#error_name>;
 
                 fn from_str(s: &str) -> Result<Self, Self::Err> {
                     let mut segments = s.strip_prefix('/').unwrap_or(s).split('/');
@@ -140,7 +149,7 @@ impl RouteEnum {
             let route_str = &route.route;
 
             error_variants.push(quote! { #route_name(#error_name) });
-            display_match.push(quote! { Self::#route_name(err) => write!(f, "Route '{}' ({}) did not match: {}", stringify!(#route_name), #route_str, err)? });
+            display_match.push(quote! { Self::#route_name(err) => write!(f, "Route '{}' ({}) did not match:\n{}", stringify!(#route_name), #route_str, err)? });
             type_defs.push(route.error_type());
         }
 
@@ -180,7 +189,6 @@ impl RouteEnum {
             }
         }
     }
-    
 }
 
 impl ToTokens for RouteEnum {
